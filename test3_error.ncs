@@ -1,0 +1,8 @@
+main {
+    int a;
+    scan(a);
+    a = a ^ a;
+    if (!a) {
+        print(a);
+    }
+}
