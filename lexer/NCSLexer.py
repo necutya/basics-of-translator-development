@@ -1,4 +1,4 @@
-from lexer.const import *
+from const import *
 
 
 class NCSLexer:
@@ -7,10 +7,11 @@ class NCSLexer:
     classes = classes
     stf = stf
     states = states
+    errors_description = errors_description
 
     def __init__(self, nsc_code):
         # Initial code
-        self.source_code = nsc_code + " " # to read last symbol
+        self.source_code = nsc_code + " "  # to read last symbol
         self.lenCode = len(self.source_code)
 
         # Tables
@@ -34,14 +35,13 @@ class NCSLexer:
             while self.numChar < self.lenCode:
                 self.char = self._next_char()  # read symbol
                 self.state = NCSLexer._next_state(self.state, NCSLexer._class_of_char(self.char))  # get next state
-                # print(NCSLexer._is_final_state(self.state))
                 if NCSLexer._is_initial_state(self.state):
                     self.lexeme = ''  # якщо стан НЕ заключний, а стартовий - нова лексема
                 elif NCSLexer._is_final_state(self.state):  # якщо стан заключний
                     self.processing()  # виконати семантичні процедури
                 else:
                     self.lexeme += self.char  # якщо стан НЕ закл. і не стартовий - додати символ до лексеми
-            print('Lexer: Лексичний аналіз завершено успішно')
+            print('NCSLexer: Лексичний аналіз завершено успішно')
         except SystemExit as e:
             # Встановити ознаку неуспішності
             self.success = (False, 'Lexer')
@@ -79,37 +79,48 @@ class NCSLexer:
         elif self.state in NCSLexer.states['error']:
             self.fail()
 
-
     def fail(self):
-        if self.state == 101:
-            print('NCSLexer: у рядку ', self.numLine, ' неочікуваний символ ' + self.char)
-            exit(101)
-        if self.state == 102:
-            print('NCSLexer: у рядку ', self.numLine, ' очікувався символ =, а не ' + self.char)
-            exit(102)
+        # raise error with specific code
+        for code, error_decs in NCSLexer.errors_description.items():
+            if self.state == code:
+                print(error_decs % (self.numLine, self.char))
+                exit(code)
 
     def print_symbols_table(self):
-        print('|#\tЛексема\tТокен\tІндекс|')
+        print('\n{:^46s}'.format('Таблиця символів'))
+        print(*('-' for _ in range(23)))
+        print('{0:^3s} | {1:^10s} | {2:^17s} | {3:^6s}'.format('#', 'Лексема', 'Токен', 'Індекс'))
+        print(*('-' for _ in range(23)))
         for value in self.tableOfSymb.values():
-            print('|{}\t{}\t{}\t{}'.format(*value))
+            if value[3] == '':
+                print('{0:<3d} | {1:<10s} | {2:<17s} |'.format(*value[0: 3]))
+            else:
+                print('{0:<3d} | {1:<10s} | {2:<17s} | {3:<6d}'.format(*value))
+        print(*('-' for _ in range(23)))
 
     def print_ids_table(self):
-        # print('|#\tЛексема\tТокен\tІндекс|')
-        # for value in self.tableOfSymb.values():
-        #     print('|{}\t{}\t{}\t{}|'.format(*value))
-        print(self.tableOfId)
+        print('\n{:^26s}'.format('Таблиця ідентифікаторів'))
+        print(*('-' for _ in range(13)))
+        print('{0:^15s} | {1:^8s}'.format('Назва', 'Індекс'))
+        print(*('-' for _ in range(13)))
+        for value in self.tableOfId.items():
+            print('{0:^15s} | {1:^8d}'.format(*value))
+        print(*('-' for _ in range(13)))
 
     def print_const_table(self):
-        # print('|#\tЛексема\tТокен\tІндекс|')
-        # for value in self.tableOfSymb.values():
-        #     print('|{}\t{}\t{}\t{}|'.format(*value))
-        print(self.tableOfConst)
+        print('\n{:^26s}'.format('Таблиця констант'))
+        print(*('-' for _ in range(13)))
+        print('{0:^15s} | {1:^8s}'.format('Константа', 'Індекс'))
+        print(*('-' for _ in range(13)))
+        for value in self.tableOfConst.items():
+            print('{0:^15s} | {1:^8d}'.format(*value))
+        print(*('-' for _ in range(13)))
 
     def _get_index(self):
-        if self.state in self.states['identifier']:
-            return NCSLexer._get_or_set_id_index(self.lexeme, self.tableOfId)
-        elif self.state in self.states['const']:
+        if self.state in self.states['const'] or self.lexeme in ('true', 'false'):
             return NCSLexer._get_or_set_id_index(self.lexeme, self.tableOfConst)
+        elif self.state in self.states['identifier']:
+            return NCSLexer._get_or_set_id_index(self.lexeme, self.tableOfId)
 
     def _next_char(self):
         char = self.source_code[self.numChar]
@@ -162,10 +173,12 @@ class NCSLexer:
 
 if __name__ == '__main__':
     try:
-        with open('../test4_error.ncs', 'r') as f:
+        with open('../test1_success.ncs', 'r') as f:
             sourceCode = f.read()
             lexer = NCSLexer(sourceCode)
             lexer.start()
             lexer.print_symbols_table()
+            lexer.print_ids_table()
+            lexer.print_const_table()
     except FileNotFoundError as e:
         print("Неправильний шлях до файлу.")
