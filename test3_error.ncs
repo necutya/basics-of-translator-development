@@ -1,4 +1,4 @@
 main {
     int a;
-    orint(a&a);
+    scan(a+a);
 }

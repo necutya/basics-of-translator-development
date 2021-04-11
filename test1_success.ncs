@@ -1,7 +1,7 @@
 main {
 	int i;
 	int NUM1, num2;
-
+    i = -i;
 	scan(NUM1, num2);
 
 

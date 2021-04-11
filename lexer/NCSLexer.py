@@ -1,4 +1,4 @@
-from const import *
+from lexer.const import *
 
 
 class NCSLexer:
@@ -30,22 +30,20 @@ class NCSLexer:
 
         self.success = (True, 'Lexer')
 
-    def start(self):
+    def run(self):
         try:
             while self.numChar < self.lenCode:
                 self.char = self._next_char()  # read symbol
                 self.state = NCSLexer._next_state(self.state, NCSLexer._class_of_char(self.char))  # get next state
                 if NCSLexer._is_initial_state(self.state):
-                    self.lexeme = ''  # якщо стан НЕ заключний, а стартовий - нова лексема
+                    self.lexeme = ''  # if state is initial -> create a new lexeme
                 elif NCSLexer._is_final_state(self.state):  # якщо стан заключний
-                    self.processing()  # виконати семантичні процедури
+                    self.processing()
                 else:
-                    self.lexeme += self.char  # якщо стан НЕ закл. і не стартовий - додати символ до лексеми
+                    self.lexeme += self.char
             print('NCSLexer: Лексичний аналіз завершено успішно')
         except SystemExit as e:
-            # Встановити ознаку неуспішності
             self.success = (False, 'Lexer')
-            # Повідомити про факт виявлення помилки
             print('NCSLexer: Аварійне завершення програми з кодом {0}'.format(e))
 
     def processing(self):
@@ -169,16 +167,3 @@ class NCSLexer:
             index = len(table) + 1
             table[lexeme] = index
         return index
-
-
-if __name__ == '__main__':
-    try:
-        with open('../test1_success.ncs', 'r') as f:
-            sourceCode = f.read()
-            lexer = NCSLexer(sourceCode)
-            lexer.start()
-            lexer.print_symbols_table()
-            lexer.print_ids_table()
-            lexer.print_const_table()
-    except FileNotFoundError as e:
-        print("Неправильний шлях до файлу.")
