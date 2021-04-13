@@ -28,7 +28,7 @@ class NCSLexer:
         self.char = ''
         self.lexeme = ''
 
-        self.success = (True, 'Lexer')
+        self.success = True
 
     def run(self):
         try:
@@ -41,10 +41,15 @@ class NCSLexer:
                     self.processing()
                 else:
                     self.lexeme += self.char
+            print("\033[32m", end='')
             print('NCSLexer: Лексичний аналіз завершено успішно')
+            print('\033[0m', end='')
+
         except SystemExit as e:
-            self.success = (False, 'Lexer')
+            self.success = False
+            print("\033[31m")
             print('NCSLexer: Аварійне завершення програми з кодом {0}'.format(e))
+            print('\033[0m')
 
     def processing(self):
 
@@ -116,9 +121,9 @@ class NCSLexer:
 
     def _get_index(self):
         if self.state in self.states['const'] or self.lexeme in ('true', 'false'):
-            return NCSLexer._get_or_set_id_index(self.lexeme, self.tableOfConst)
+            return NCSLexer._get_or_set_id_index(self.state, self.lexeme, self.tableOfConst)
         elif self.state in self.states['identifier']:
-            return NCSLexer._get_or_set_id_index(self.lexeme, self.tableOfId)
+            return NCSLexer._get_or_set_id_index(self.state, self.lexeme, self.tableOfId)
 
     def _next_char(self):
         char = self.source_code[self.numChar]
@@ -161,9 +166,20 @@ class NCSLexer:
         return "Any classes does not have this symbol"
 
     @staticmethod
-    def _get_or_set_id_index(lexeme, table):
+    def _get_or_set_id_index(state, lexeme, table):
         index = table.get(lexeme)
         if not index:
             index = len(table) + 1
-            table[lexeme] = index
+            if (token := NCSLexer._get_token(state, lexeme)) == 'ident':
+                token = 'undefined'
+            table[lexeme] = (index, token)
+
+            # For identifiers
+            if lexeme in ('true', 'false'):
+                table[lexeme] += (eval(lexeme.title()),)
+            elif state in NCSLexer.states['identifier']:
+                table[lexeme] += ('null',)
+            else:
+                table[lexeme] += (eval(f"{token}({lexeme})"),)
+
         return index

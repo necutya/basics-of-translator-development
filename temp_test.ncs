@@ -1,3 +1,3 @@
 main {
-   print(a + 2, b + 2);
+   int q = 10 / 3;
 }
