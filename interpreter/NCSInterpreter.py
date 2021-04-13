@@ -65,7 +65,7 @@ class NCSInterpreter:
                     self.step_to_print(i + 1, lex, tok)
         except SystemExit as e:
             print("\033[31m")
-            print('Parser: Аварійне завершення програми з кодом {0}'.format(e))
+            print('NCSInterpreter: Аварійне завершення програми з кодом {0}'.format(e))
             print('\n\033[0m')
             return False
         except Exception as e:
@@ -123,7 +123,8 @@ class NCSInterpreter:
                 NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
 
             if tok == 'rel_op':
-                if lex not in ('==', '!=') and not all((tok in ('int', 'float') for tok in (tok_right, tok_left))):
+                print()
+                if lex not in ('==', '!=') and not all((tok in ('int', 'float', 'ident') for tok in (tok_right, tok_left))):
                     NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
 
             self.__process_operator((lex_left, tok_left), lex, (lex_right, tok_right))
@@ -150,6 +151,11 @@ class NCSInterpreter:
     def __run_operator(self, left, lex, right):
         lex_left, type_left, value_left = left
         lex_right, type_right, value_right = right
+
+        if self.table_of_ids.get(lex_left, None) and NCSInterpreter.__is_nullable(value_left):
+            NCSInterpreter.fail_run_time('nullable', lex_left)
+        if self.table_of_ids.get(lex_right, None) and NCSInterpreter.__is_nullable(value_right):
+            NCSInterpreter.fail_run_time('nullable', lex_right)
         if operator := NCSInterpreter.operator_mapping.get(lex, None):
             try:
                 print(f"CALC: {value_left} {operator} {value_right}")

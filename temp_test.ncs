@@ -1,3 +1,4 @@
 main {
-   int q = 10 / 3;
+   int a;
+   int b = a + 2;
 }
