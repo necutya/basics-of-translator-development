@@ -17,16 +17,21 @@ class NCSInterpreter:
         'zero_division': ('%s\n\tДілення на нуль: %s %s %s.', 3),
         'invalid_operand_types': ('%s\n\tНевалідний тип одного або декількох операндів: %s %s %s.', 4),
         'nullable': ('%s\n\tНевизначена зміна \'%s\' не може використовуватись в операціях.', 5),
+        'print_error': ('%s\n\tПомилка при виведенні', 6),
+        'empty_label': ('%s\n\tПусте значення мітки', 7),
+        'invalid_value': ('%s\n\tНевідповідні типи даних у змінної та значення: \'%s\' %s', 8),
         'invalid_operator': ('%s\n\tНевідомий світу оператор %s', 322),
     }
 
-    def __init__(self, postfix_code, table_of_ids, table_of_consts, to_view=False):
+    def __init__(self, postfix_code, table_of_ids, table_of_consts, table_of_labels, to_view=False):
         self.postfix_code = postfix_code
         self.table_of_ids = table_of_ids
         self.table_of_consts = table_of_consts
+        self.table_of_labels = table_of_labels
 
         self.stack = Stack()
         self.to_view = to_view
+        self.instr_number = 0
 
         self.success = True
 
@@ -46,10 +51,11 @@ class NCSInterpreter:
         self.success = self.__interpret()
 
     def __interpret(self):
+
         try:
-            for i in range(len(self.postfix_code)):
-                lex, tok, var_type = self.postfix_code.pop(0)
-                if tok in ('int', 'float', 'bool', 'ident'):
+            while self.instr_number < len(self.postfix_code):
+                lex, tok, var_type = self.postfix_code[self.instr_number]
+                if tok in ('int', 'float', 'bool', 'ident', 'label'):
                     self.stack.push((lex, tok))
                     # to init a variable
                     if tok == 'ident' and var_type:
@@ -58,11 +64,30 @@ class NCSInterpreter:
                             var_type,
                             self.table_of_ids[lex][2]
                         )
+                    next_instr_number = self.instr_number + 1
+                elif tok == 'out':
+                    self.__print_data()
+                    next_instr_number = self.instr_number + 1
+                elif tok == 'input':
+                    self.__scan_variables()
+                    next_instr_number = self.instr_number + 1
+                elif tok in ('jf', 'jump', 'colon'):
+                    next_instr_number = self.__do_jumps(lex, tok)
                 else:
                     self.__do_action(lex, tok)
+                    next_instr_number = self.instr_number + 1
 
                 if self.to_view:
-                    self.step_to_print(i + 1, lex, tok)
+                    self.step_to_print(self.instr_number + 1, lex, tok)
+
+                self.instr_number = next_instr_number
+        except IndexError as e:
+            # \(*_*)/ how it has been happened
+            print("\033[31m")
+            print('NCSInterpreter: Помилка з взяттям індексу постфіксного коду')
+            print('\n\tАварійне завершення програми з кодом {0}'.format(e))
+            print('\n\033[0m')
+            return False
         except SystemExit as e:
             print("\033[31m")
             print('NCSInterpreter: Аварійне завершення програми з кодом {0}'.format(e))
@@ -76,6 +101,37 @@ class NCSInterpreter:
             print('NCSInterpreter: Інтерпретатор завершив роботу успішно')
             print('\n\033[0m', end='')
             return True
+
+    def __do_jumps(self, lex, tok):
+        if tok == 'jump':
+            return self.__processing_jump()
+        elif tok == 'colon':
+            return self.__processing_colon()
+        elif tok == 'jf':
+            return self.__processing_jf()
+
+    def __processing_jump(self):
+        lex, tok = self.stack.pop()
+        if next_instr_number := self.table_of_labels.get(lex):
+            return next_instr_number
+        NCSInterpreter.fail_run_time('empty_label_value')
+
+    def __processing_colon(self):
+        _, _ = self.stack.pop()
+        return self.instr_number + 1
+
+    def __processing_jf(self):
+        label_lex, label_tok = self.stack.pop()
+
+        bool_lex, bool_tok = self.stack.pop()
+        _, _ = self.__check_token_and_lexeme(bool_tok, bool_lex)
+
+        if not bool_lex:
+            if next_instr_number := self.table_of_labels.get(label_lex):
+                return next_instr_number
+            NCSInterpreter.fail_run_time('empty_label_value')
+        else:
+            return self.instr_number + 1
 
     def __do_action(self, lex, tok):
         if lex == "=" and tok == "assign_op":
@@ -120,11 +176,15 @@ class NCSInterpreter:
             lex_left, tok_left = self.stack.pop()
 
             if tok == 'bool_op' and (tok_right, tok_left) != ('bool', 'bool'):
-                NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
+                print(self.table_of_ids)
+                if tok_right == 'ident' and self.table_of_ids[lex_right][1] != 'bool':
+                    NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
+                if tok_left == 'ident' and self.table_of_ids[lex_left][1] != 'bool':
+                    NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
 
             if tok == 'rel_op':
-                print()
-                if lex not in ('==', '!=') and not all((tok in ('int', 'float', 'ident') for tok in (tok_right, tok_left))):
+                if lex not in ('==', '!=') and not all(
+                        (tok in ('int', 'float', 'ident') for tok in (tok_right, tok_left))):
                     NCSInterpreter.fail_run_time('invalid_operand_types', lex_left, lex, lex_right)
 
             self.__process_operator((lex_left, tok_left), lex, (lex_right, tok_right))
@@ -158,7 +218,8 @@ class NCSInterpreter:
             NCSInterpreter.fail_run_time('nullable', lex_right)
         if operator := NCSInterpreter.operator_mapping.get(lex, None):
             try:
-                print(f"CALC: {value_left} {operator} {value_right}")
+                # print(f"LEX: {lex_left} {operator} {lex_right}")
+                # print(f"CALC: {value_left} {operator} {value_right}")
                 calc_result = eval(f"{value_left} {operator} {value_right}")
             except ZeroDivisionError:
                 NCSInterpreter.fail_run_time('zero_division', value_left, operator, value_right)
@@ -179,6 +240,36 @@ class NCSInterpreter:
         if not self.table_of_consts.get(str(value), None):
             index = len(self.table_of_consts) + 1
             self.table_of_consts[str(value)] = (index, token, value)
+
+    def __print_data(self):
+        try:
+            lex, tok = self.stack.pop()
+            _, _ = self.__check_token_and_lexeme(tok, lex)
+
+            if tok == 'ident':
+                if to_print := self.table_of_ids.get(lex):
+                    print(to_print[-1])
+            else:
+                if tok == 'bool':
+                    lex = str(lex).lower()
+                print(lex)
+        except Exception as e:
+            NCSInterpreter.fail_run_time('print_error')
+
+    def __scan_variables(self):
+        lex, tok = self.stack.pop()
+        _, var_type = self.__check_token_and_lexeme(tok, lex)
+        temp = input()
+        try:
+            typed_temp = eval(f"{var_type}({temp})")
+        except Exception:
+            NCSInterpreter.fail_run_time('invalid_value', lex, temp)
+        else:
+            self.table_of_ids[lex] = (
+                self.table_of_ids[lex][0],
+                var_type,
+                typed_temp
+            )
 
     @staticmethod
     def __is_undefined(variable_type: str) -> bool:

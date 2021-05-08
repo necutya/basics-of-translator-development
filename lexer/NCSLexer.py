@@ -9,15 +9,15 @@ class NCSLexer:
     states = states
     errors_description = errors_description
 
-    def __init__(self, nsc_code):
+    def __init__(self, nsc_code, table_of_ids, table_of_consts, table_of_symbols):
         # Initial code
         self.source_code = nsc_code + " "  # to read last symbol
         self.lenCode = len(self.source_code)
 
         # Tables
-        self.tableOfId = {}
-        self.tableOfConst = {}
-        self.tableOfSymb = {}
+        self.tableOfId = table_of_ids
+        self.tableOfConst = table_of_consts
+        self.tableOfSymb = table_of_symbols
 
         # Current state
         self.state = states["initial"][0]
@@ -47,9 +47,9 @@ class NCSLexer:
 
         except SystemExit as e:
             self.success = False
-            print("\033[31m")
+            print("\033[31m", end='')
             print('NCSLexer: Аварійне завершення програми з кодом {0}'.format(e))
-            print('\033[0m')
+            print('\033[0m', end='')
 
     def processing(self):
 

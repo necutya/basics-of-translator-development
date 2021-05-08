@@ -6,14 +6,18 @@ from parser.const import (
 
 class NCSParser:
 
-    def __init__(self, table_of_symbols, to_view=False):
+    def __init__(self, table_of_symbols, table_of_labels, table_of_ids, postfix_code, to_view=False):
         self.table_of_symbols = table_of_symbols
+        self.table_of_labels = table_of_labels
+        self.table_of_ids = table_of_ids
         self.len_table_of_symbols = len(self.table_of_symbols)
         self.row_number = 1
 
         self.success = True
-        self.postfix_code = []
+        self.postfix_code = postfix_code
         self.to_view = to_view
+
+        self.for_loop_temp_vars = []
 
     def run(self):
         self.success = self.parse_program()
@@ -71,9 +75,9 @@ class NCSParser:
                 self.parse_token('}', 'curve_brackets_op')
 
         except SystemExit as e:
-            print("\033[31m")
+            print("\033[31m", end='')
             print('Parser: Аварійне завершення програми з кодом {0}'.format(e))
-            print('\n\033[0m')
+            print('\n\033[0m', end='')
             return False
 
         print("\033[32m", end='')
@@ -82,23 +86,19 @@ class NCSParser:
         return True
 
     def parse_statements_list(self):
-        # print('parse_statement_list:')
         while self.parse_statement():
             pass
         return True
 
     def parse_statement(self):
-        # print('\t', 'parse_statement', sep='')
         line_number, lex, tok = self.get_symbol()
 
         if tok == 'ident':
-            # print('\t' * 2, 'parse_assign', sep='')
             self.postfix_code.append((lex, tok, None))
             if self.to_view:
                 self.print_translator_step(lex)
 
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
             if self.get_symbol()[-1] == 'assign_op':
                 self.parse_assign()
             else:
@@ -120,17 +120,18 @@ class NCSParser:
             self.parse_token(';', 'op_end', '\t' * 3)
             return True
 
+        elif lex in ('int', 'float', 'bool') and tok == 'keyword':
+            self.parse_declaration()
+            self.parse_token(';', 'op_end', '\t' * 3)
+            return True
+
+
         elif lex == 'for' and tok == 'keyword':
             self.parse_for()
             return True
 
         elif lex == 'if' and tok == 'keyword':
             self.parse_if()
-            return True
-
-        elif lex in ('int', 'float', 'bool') and tok == 'keyword':
-            self.parse_declaration()
-            self.parse_token(';', 'op_end', '\t' * 3)
             return True
 
         elif lex == '}' and tok == 'curve_brackets_op':
@@ -144,50 +145,50 @@ class NCSParser:
             return True
 
     def parse_scan(self):
-        # print('\t' * 2, 'parse_scan', sep='')
 
         line_number, lex, tok = self.get_symbol()
         self.row_number += 1
-        # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
 
         self.parse_token('(', 'brackets_op', '\t' * 4)
         self.parse_io_content(allow_arithm_expr=False)
         self.parse_token(')', 'brackets_op', '\t' * 4)
 
     def parse_print(self):
-        # print('\t' * 2, 'parse_print', sep='')
-
         line_number, lex, tok = self.get_symbol()
         self.row_number += 1
-        # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
 
         self.parse_token('(', 'brackets_op', '\t' * 4)
         self.parse_io_content()
         self.parse_token(')', 'brackets_op', '\t' * 4)
 
     def parse_io_content(self, allow_arithm_expr=True):
-        # print('\t' * 3, 'parse_var_list_to_command', sep='')
         line_number, lex, tok = self.get_symbol()
-
-        if tok == 'ident':
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 5)
-            if allow_arithm_expr:
-                self.parse_arithm_expression()
+        if tok in ('ident', 'int', 'float',  'bool') and allow_arithm_expr:
+            self.parse_expression()
+        elif tok == 'ident':
+            self.postfix_code.append(((lex, tok, None)))
+            self.row_number += 1
         else:
             NCSParser.fail_parse('not_expected', line_number, lex, tok,
                                  "ідентифікатор (ident)")
 
         line_number, lex, tok = self.get_symbol()
         if lex == ')' and tok == 'brackets_op':
+            if allow_arithm_expr:
+                self.postfix_code.append(('OUT', 'out', None))
+            else:
+                self.postfix_code.append(('INPUT', 'input', None))
             return True
 
         elif lex == ',' and tok == 'comma':
+            if allow_arithm_expr:
+                self.postfix_code.append(('OUT', 'out', None))
+            else:
+                self.postfix_code.append(('INPUT', 'input', None))
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 5)
-            self.parse_io_content()
+            self.parse_io_content(allow_arithm_expr)
 
     def parse_assign(self):
-        # print('\t' * 2, 'parse_assign', sep='')
 
         if self.parse_token('=', 'assign_op', '\t' * 3):
             self.parse_expression()
@@ -199,7 +200,6 @@ class NCSParser:
             return False
 
     def parse_expression(self, required=False):
-        # print('\t' * 3, 'parse_expression', sep='')
         self.parse_arithm_expression()
 
         while self.parse_bool_expr():
@@ -208,11 +208,9 @@ class NCSParser:
         return True
 
     def parse_bool_expr(self, required=False):
-        # print('\t' * 4, 'parse_bool_expr', sep='')
         line_number, lex, tok = self.get_symbol()
         if tok in ('rel_op', 'bool_op'):
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 4)
             self.parse_arithm_expression()
             self.postfix_code.append((lex, tok, None))
 
@@ -230,7 +228,6 @@ class NCSParser:
             line_number, lex, tok = self.get_symbol()
             if tok == 'add_op':
                 self.row_number += 1
-                # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 5)
                 self.parse_term()
                 self.postfix_code.append((lex, tok, None))
                 if self.to_view:
@@ -240,13 +237,11 @@ class NCSParser:
         return True
 
     def parse_term(self):
-        # print('\t' * 5, 'parse_term', sep='')
         self.parse_power()
         while True:
             line_number, lex, tok = self.get_symbol()
             if tok in 'mult_op':
                 self.row_number += 1
-                # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 6)
                 self.parse_power()
                 self.postfix_code.append((lex, tok, None))
                 if self.to_view:
@@ -256,13 +251,11 @@ class NCSParser:
         return True
 
     def parse_power(self):
-        # print('\t' * 5, 'parse_term', sep='')
         self.parse_factor()
         while True:
             line_number, lex, tok = self.get_symbol()
             if tok == 'pow_op':
                 self.row_number += 1
-                # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 6)
                 self.parse_factor()
                 self.postfix_code.append((lex, tok, None))
                 if self.to_view:
@@ -272,9 +265,6 @@ class NCSParser:
         return True
 
     def parse_factor(self):
-        # print('\t' * 6, 'parse_factor', sep='')
-
-        # Kostil
         has_unar = False
         line_number, lex, tok = self.get_symbol()
         if lex == '-':
@@ -293,13 +283,11 @@ class NCSParser:
                     self.print_translator_step(lex)
 
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 7)
 
         elif lex == '(':
             self.row_number += 1
             self.parse_arithm_expression()
             self.parse_token(')', 'brackets_op', '\t' * 7)
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 7)
         else:
             NCSParser.fail_parse('not_expected', line_number, lex, tok,
                                  'rel_op, int, float, ident або \'(\' Expression \')\'')
@@ -307,11 +295,9 @@ class NCSParser:
 
     def parse_declaration(self):
         # Parse type
-        # print('\t' * 2, 'parse_declaration', sep='')
         line_number, lex, tok = self.get_symbol()
         self.row_number += 1
         if lex in ('int', 'float', 'bool') and tok == 'keyword':
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
             self.parse_var_list(lex)
 
         else:
@@ -319,14 +305,11 @@ class NCSParser:
                                  'int, float або bool.')
 
     def parse_var_list(self, var_type):
-        # print('\t' * 3, 'parse_var_list', sep='')
         line_number, lex, tok = self.get_symbol()
         self.row_number += 1
 
         if tok == 'ident':
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 5)
             self.postfix_code.append((lex, tok, var_type))
-            pass
         else:
             NCSParser.fail_parse('not_expected', line_number, lex, tok,
                                  "ідентифікатор (ident)")
@@ -338,49 +321,89 @@ class NCSParser:
 
         if lex == ',' and tok == 'comma':
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 5)
             self.parse_var_list(var_type)
 
         elif lex == ';' and tok == 'op_end':
             return True
 
     def parse_if(self):
-        # print('\t' * 3, 'parse_if', sep='')
         self.parse_token('if', 'keyword', '\t' * 4)
 
         self.parse_expression(required=True)
 
         line_number, lex, tok = self.get_symbol()
+        m1 = self.create_label()
+
         if lex == '{' and tok == 'curve_brackets_op':
+
+            self.postfix_code.append((*m1, None))
+            self.postfix_code.append(('JF', 'jf', None))
+
             self.row_number += 1
             self.parse_statements_list()
             self.parse_token('}', 'curve_brackets_op', '\t' * 4)
+
+            self.set_label_val(m1)
+            self.postfix_code.append((*m1, None))
+            self.postfix_code.append((':', 'colon', None))
         else:
+            self.postfix_code.append((*m1, None))
+            self.postfix_code.append(('JF', 'jf', None))
+
             self.parse_statement()
 
+            self.set_label_val(m1)
+            self.postfix_code.append((*m1, None))
+            self.postfix_code.append((':', 'colon', None))
+
     def parse_for(self):
+        step = self.create_label()
+        end = self.create_label()
+
         # print('\t' * 3, 'parse_for', sep='')
         self.parse_token('for', 'keyword', '\t' * 4)
         self.parse_token('(', 'brackets_op', '\t' * 4)
-        self.parse_ind_expression()
+        self.parse_ind_expression(step, end)
         self.parse_token(')', 'brackets_op', '\t' * 4)
 
         line_number, lex, tok = self.get_symbol()
+
         if lex == '{' and tok == 'curve_brackets_op':
             self.row_number += 1
             self.parse_statements_list()
+
             self.parse_token('}', 'curve_brackets_op', '\t' * 4)
+
+
+
         else:
             self.parse_statement()
 
-    def parse_ind_expression(self):
-        # print('\t' * 4, 'parse_for', sep='')
+        temp = self.for_loop_temp_vars.pop()
+        self.postfix_code.append((temp[1], 'ident', None))
+        self.postfix_code.append((temp[0], 'ident', None))
+        self.postfix_code.append(('=', 'assign_op', None))
+
+        self.postfix_code.append((*step, None))
+        self.postfix_code.append(('JMP', 'jump', None))
+        self.set_label_val(end)
+        self.postfix_code.append((*end, None))
+        self.postfix_code.append((':', 'colon', None))
+
+    def parse_ind_expression(self, step, end):
 
         line_number, lex, tok = self.get_symbol()
+
         if tok == 'ident':
+
+            self.postfix_code.append((lex, tok, None))
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
             self.parse_assign()
+
+            self.set_label_val(step)
+            self.postfix_code.append((*step, None))
+            self.postfix_code.append((':', 'colon', None))
+
         else:
             NCSParser.fail_parse('not_expected', line_number, lex, tok,
                                  "ідентифікатор (ident)")
@@ -389,10 +412,28 @@ class NCSParser:
         self.parse_expression(required=True)
         self.parse_token(';', 'op_end', '\t' * 5)
 
+        self.postfix_code.append((*end, None))
+        self.postfix_code.append(('JF', 'jf', None))
+
         if tok == 'ident':
+            _len = len(self.for_loop_temp_vars)
+            self.for_loop_temp_vars.append((f'temp_{_len}', lex))
+            self.table_of_ids[f'temp_{_len}'] = (len(self.table_of_ids), 'int', 'null')
+            self.postfix_code.append((f'temp_{_len}', 'ident', 'int'))
+
             self.row_number += 1
-            # self.print_lexeme_info(line_number, lex, tok, indent='\t' * 3)
             self.parse_assign()
         else:
             NCSParser.fail_parse('not_expected', line_number, lex, tok,
                                  "ідентифікатор (ident)")
+
+    def create_label(self) -> tuple:
+        label_number = len(self.table_of_labels) + 1
+        lexeme = f"m{label_number}"
+        if not self.table_of_labels.get(lexeme):
+            self.table_of_labels[lexeme] = 'val_undef'
+            return lexeme, 'label'
+        NCSParser.fail_parse('label_conflict')
+
+    def set_label_val(self, m1: tuple) -> None:
+        self.table_of_labels[m1[0]] = len(self.postfix_code)

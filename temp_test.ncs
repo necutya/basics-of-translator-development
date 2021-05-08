@@ -1,4 +1,12 @@
 main {
-   int a;
-   int b = a + 2;
+   int a = 10, c;
+   float b = (a + 4. * 1.7 / 2.2) ^ 2;
+   bool d = true;
+   scan(c);
+   if c >= a && d {
+      print(c);
+      int i;
+      for(i=0; i<5; i=i+1)
+        print(a * i);
+   }
 }
